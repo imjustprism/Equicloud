@@ -31,7 +31,10 @@ async fn root_redirect() -> Response {
         "message": "EquiCloud",
         "version": "1.0.0",
         "endpoints": [
-            "/health"
+            "/health",
+            "/v1/oauth/callback",
+            "/v1/oauth/settings",
+            "/v1/settings"
         ]
     }))
     .into_response()

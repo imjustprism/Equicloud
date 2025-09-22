@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS equicloud.users (
     id TEXT PRIMARY KEY,
-    settings TEXT,
-    created_at TIMESTAMP,
-    updated_at TIMESTAMP
+    settings BLOB,
+    created_at BIGINT,
+    updated_at BIGINT
 );

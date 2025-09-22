@@ -3,8 +3,8 @@ use scylla::client::session::Session;
 use scylla::client::session_builder::SessionBuilder;
 use std::env;
 
-pub mod db;
 pub mod migrations;
+pub mod settings_handlers;
 
 pub use migrations::MigrationRunner;
 
