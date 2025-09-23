@@ -5,17 +5,6 @@ EquiCloud is a Rust-based version of vencloud using ScyllaDB
 ## Requirements
 
 <details>
-<summary>Native Installation</summary>
-
-- **Rust**: https://www.rust-lang.org/tools/install
-- **ScyllaDB**: 5.4+ or 2025.3.1+ (recommended)
-- **System Dependencies**:
-  - `pkg-config`
-  - `libssl-dev` (Ubuntu/Debian) or `openssl-devel` (RHEL/CentOS)
-
-</details>
-
-<details>
 <summary>Docker Installation</summary>
 
 - **Docker**: https://docs.docker.com/engine/install
@@ -23,7 +12,15 @@ EquiCloud is a Rust-based version of vencloud using ScyllaDB
 
 </details>
 
-## Quick Start (Docker - Recommended)
+<details>
+<summary>Native Installation</summary>
+
+- **Rust**: https://www.rust-lang.org/tools/install
+- **ScyllaDB**: 5.4+ or 2025.3.1+ (recommended)
+
+</details>
+
+## Docker Installation
 
 1. **Download required files**:
    ```bash
@@ -43,6 +40,26 @@ EquiCloud is a Rust-based version of vencloud using ScyllaDB
    ```
 
 The API will be available at `http://{SERVER_HOST}:{SERVER_PORT}` (default: `http://0.0.0.0:9000`).
+
+#### Discord OAuth Setup
+1. Go to [Discord Developer Portal](https://discord.com/developers/applications)
+2. Create a new application
+3. Navigate to OAuth2 settings
+4. Add redirect URI: `{SERVER_FQDN}/v1/oauth/callback`
+5. Copy Client ID and Secret to your `.env`:
+
+```env
+DISCORD_CLIENT_ID=your_client_id_here
+DISCORD_CLIENT_SECRET=your_client_secret_here
+```
+
+#### Optional Settings
+```env
+RUST_LOG=info                       # Logging level (trace, debug, info, warn, error)
+API_ROOT_REDIRECT_URL=              # URL to redirect root requests to
+MAX_BACKUP_SIZE_BYTES=62914560      # Max upload size (60MB default)
+DISCORD_ALLOWED_USER_IDS=           # Comma-separated whitelist of Discord user IDs
+```
 
 ## Native Installation
 
@@ -75,25 +92,6 @@ cargo build --release
 ./target/release/equicloud
 ```
 
-#### Discord OAuth Setup
-1. Go to [Discord Developer Portal](https://discord.com/developers/applications)
-2. Create a new application
-3. Navigate to OAuth2 settings
-4. Add redirect URI: `{SERVER_FQDN}/v1/oauth/callback`
-5. Copy Client ID and Secret to your `.env`:
-
-```env
-DISCORD_CLIENT_ID=your_client_id_here
-DISCORD_CLIENT_SECRET=your_client_secret_here
-```
-
-#### Optional Settings
-```env
-RUST_LOG=info                       # Logging level (trace, debug, info, warn, error)
-API_ROOT_REDIRECT_URL=              # URL to redirect root requests to
-MAX_BACKUP_SIZE_BYTES=62914560      # Max upload size (60MB default)
-DISCORD_ALLOWED_USER_IDS=           # Comma-separated whitelist of Discord user IDs
-```
 ### Reverse Proxy Example (nginx)
 
 ```nginx
