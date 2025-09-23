@@ -1,17 +1,26 @@
 services:
+  equicloud:
+    build: .
+    ports:
+      - "9000:9000"
+    env_file:
+      - .env
+    depends_on:
+      scylla:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - equicloud_net
+
   scylla:
-    image: scylladb/scylla:5.4
+    image: scylladb/scylla:2025.3.1
     container_name: scylla-node
     restart: unless-stopped
-    ports:
-      - "9042:9042"
     volumes:
       - scylla_data:/var/lib/scylla
     command: [
-      "--smp=2", 
-      "--memory=4G",
-      "--authenticator=PasswordAuthenticator",
-      "--authorizer=CassandraAuthorizer"
+      "--smp=2",
+      "--memory=4G"
     ]
     environment:
       - SCYLLA_ARGS=--log-to-stdout=1
@@ -21,11 +30,12 @@ services:
       timeout: 10s
       retries: 5
     networks:
-      - scylla_net
+      - equicloud_net
+
 
 volumes:
   scylla_data:
 
 networks:
-  scylla_net:
+  equicloud_net:
     driver: bridge
