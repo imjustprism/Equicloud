@@ -5,6 +5,7 @@ use axum::{
 };
 use serde_json::{Value, json};
 use std::env;
+use tracing::debug;
 
 pub fn register() -> Router {
     Router::new()
@@ -23,7 +24,12 @@ async fn health_check() -> Json<Value> {
 async fn root_redirect() -> Response {
     if let Ok(redirect_url) = env::var("API_ROOT_REDIRECT_URL") {
         if !redirect_url.is_empty() {
-            return Redirect::temporary(&redirect_url).into_response();
+            debug!("Redirecting to: {}", redirect_url);
+            if redirect_url.starts_with("http://") || redirect_url.starts_with("https://") {
+                return Redirect::permanent(&redirect_url).into_response();
+            } else {
+                debug!("Invalid redirect URL format: {}", redirect_url);
+            }
         }
     }
 
