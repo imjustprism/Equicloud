@@ -20,6 +20,18 @@ EquiCloud is a Rust-based version of vencloud using ScyllaDB
 
 </details>
 
+#### Discord OAuth Setup
+1. Go to [Discord Developer Portal](https://discord.com/developers/applications)
+2. Create a new application
+3. Navigate to OAuth2 settings
+4. Add redirect URI: `{SERVER_FQDN}/v1/oauth/callback`
+5. Copy Client ID and Secret to your `.env`:
+
+```env
+DISCORD_CLIENT_ID=your_client_id_here
+DISCORD_CLIENT_SECRET=your_client_secret_here
+```
+
 ## Docker Installation
 
 1. **Download required files**:
@@ -40,26 +52,6 @@ EquiCloud is a Rust-based version of vencloud using ScyllaDB
    ```
 
 The API will be available at `http://{SERVER_HOST}:{SERVER_PORT}` (default: `http://0.0.0.0:9000`).
-
-#### Discord OAuth Setup
-1. Go to [Discord Developer Portal](https://discord.com/developers/applications)
-2. Create a new application
-3. Navigate to OAuth2 settings
-4. Add redirect URI: `{SERVER_FQDN}/v1/oauth/callback`
-5. Copy Client ID and Secret to your `.env`:
-
-```env
-DISCORD_CLIENT_ID=your_client_id_here
-DISCORD_CLIENT_SECRET=your_client_secret_here
-```
-
-#### Optional Settings
-```env
-RUST_LOG=info                       # Logging level (trace, debug, info, warn, error)
-API_ROOT_REDIRECT_URL=              # URL to redirect root requests to
-MAX_BACKUP_SIZE_BYTES=62914560      # Max upload size (60MB default)
-DISCORD_ALLOWED_USER_IDS=           # Comma-separated whitelist of Discord user IDs
-```
 
 ## Native Installation
 
