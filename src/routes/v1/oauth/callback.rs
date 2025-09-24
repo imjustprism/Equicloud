@@ -1,11 +1,11 @@
-use axum::{extract::Query, response::Json, Extension};
+use axum::{Extension, extract::Query, response::Json};
 use reqwest;
 use serde::Deserialize;
 use serde_json::{Value, json};
-use std::env;
 use tracing::{error, info};
 
 use crate::lib::DatabaseService;
+use crate::lib::utils::{CONFIG, error_response, get_user_secret};
 
 #[derive(Deserialize)]
 pub struct OAuthCallback {
@@ -28,32 +28,25 @@ pub async fn oauth_callback(
     Query(params): Query<OAuthCallback>,
 ) -> Json<Value> {
     if let Some(error) = params.error {
-        return Json(json!({
-            "error": error
-        }));
+        return Json(error_response(&error));
     }
 
     let code = match params.code {
         Some(code) => code,
         None => {
-            return Json(json!({
-                "error": "Missing code"
-            }));
+            return Json(error_response("Missing code"));
         }
     };
 
-    let client_id = env::var("DISCORD_CLIENT_ID").unwrap_or_default();
-    let client_secret = env::var("DISCORD_CLIENT_SECRET").unwrap_or_default();
-    let server_fqdn = env::var("SERVER_FQDN").unwrap_or_default();
-    let redirect_uri = format!("{}/v1/oauth/callback", server_fqdn);
+    let redirect_uri = CONFIG.redirect_uri();
 
     let client = reqwest::Client::new();
 
     let token_response = client
         .post("https://discord.com/api/oauth2/token")
         .form(&[
-            ("client_id", &client_id),
-            ("client_secret", &client_secret),
+            ("client_id", &CONFIG.discord_client_id),
+            ("client_secret", &CONFIG.discord_client_secret),
             ("grant_type", &"authorization_code".to_string()),
             ("code", &code),
             ("redirect_uri", &redirect_uri),
@@ -66,25 +59,19 @@ pub async fn oauth_callback(
         Ok(response) => response,
         Err(err) => {
             error!("Failed to request access token: {}", err);
-            return Json(json!({
-                "error": "Failed to request access token"
-            }));
+            return Json(error_response("Failed to request access token"));
         }
     };
 
     if !token_response.status().is_success() {
-        return Json(json!({
-            "error": "Invalid code"
-        }));
+        return Json(error_response("Invalid code"));
     }
 
     let token_result: DiscordAccessTokenResult = match token_response.json().await {
         Ok(result) => result,
         Err(err) => {
             error!("Failed to parse token response: {}", err);
-            return Json(json!({
-                "error": "Failed to parse token response"
-            }));
+            return Json(error_response("Failed to parse token response"));
         }
     };
 
@@ -101,37 +88,29 @@ pub async fn oauth_callback(
         Ok(response) => response,
         Err(err) => {
             error!("Failed to request user: {}", err);
-            return Json(json!({
-                "error": "Failed to request user"
-            }));
+            return Json(error_response("Failed to request user"));
         }
     };
 
     if !user_response.status().is_success() {
-        return Json(json!({
-            "error": "Failed to request user"
-        }));
+        return Json(error_response("Failed to request user"));
     }
 
     let user_result: DiscordUserResult = match user_response.json().await {
         Ok(result) => result,
         Err(err) => {
             error!("Failed to parse user response: {}", err);
-            return Json(json!({
-                "error": "Failed to parse user response"
-            }));
+            return Json(error_response("Failed to parse user response"));
         }
     };
 
     let user_id = user_result.id;
 
-    if let Ok(allowed_users) = env::var("DISCORD_ALLOWED_USER_IDS") {
+    if let Some(allowed_users) = &CONFIG.discord_allowed_user_ids {
         if !allowed_users.is_empty() {
             let allowed_list: Vec<&str> = allowed_users.split(',').map(|s| s.trim()).collect();
             if !allowed_list.contains(&user_id.as_str()) {
-                return Json(json!({
-                    "error": "User is not whitelisted"
-                }));
+                return Json(error_response("User is not whitelisted"));
             }
         }
     }
@@ -143,9 +122,4 @@ pub async fn oauth_callback(
     Json(json!({
         "secret": secret
     }))
-}
-
-fn get_user_secret(user_id: &str) -> String {
-    let user_hash = crc32fast::hash(user_id.as_bytes());
-    format!("{:08x}", user_hash)
 }

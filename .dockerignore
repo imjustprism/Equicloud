@@ -1,7 +1,14 @@
 target/
 .env
+.env.example
 .git/
 .gitignore
+.github/
 README.md
+LICENSE
 docker-compose.yml
+compose.yml
 Dockerfile
+.dockerignore
+rustfmt.toml
+Cargo.lock

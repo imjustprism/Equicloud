@@ -25,17 +25,6 @@ async fn main() {
     info!("Starting EquiCloud server");
     info!("Connecting to database...");
 
-    let session = match lib::create_database_connection().await {
-        Ok(session) => {
-            info!("Database connection successful");
-            session
-        }
-        Err(e) => {
-            error!("Failed to connect to database: {}", e);
-            std::process::exit(1);
-        }
-    };
-
     info!("Running migrations...");
     let migration_session = match lib::create_database_connection().await {
         Ok(session) => session,
@@ -50,6 +39,17 @@ async fn main() {
         std::process::exit(1);
     }
     info!("Migrations completed");
+
+    let session = match lib::create_database_connection().await {
+        Ok(session) => {
+            info!("Database connection successful");
+            session
+        }
+        Err(e) => {
+            error!("Failed to connect to database: {}", e);
+            std::process::exit(1);
+        }
+    };
 
     let db_service = match lib::DatabaseService::new(session).await {
         Ok(service) => service,
@@ -67,13 +67,15 @@ async fn main() {
         .layer(axum::extract::Extension(db_service))
         .layer(CorsLayer::permissive());
 
-    let listener = TcpListener::bind(&bind_address)
-        .await
-        .expect("Failed to bind to address");
+    let listener = TcpListener::bind(&bind_address).await.unwrap_or_else(|e| {
+        error!("Failed to bind to address {}: {}", bind_address, e);
+        std::process::exit(1);
+    });
 
     info!("Server running on http://{}", bind_address);
 
-    axum::serve(listener, app)
-        .await
-        .expect("Server failed to start");
+    if let Err(e) = axum::serve(listener, app).await {
+        error!("Server failed to start: {}", e);
+        std::process::exit(1);
+    }
 }

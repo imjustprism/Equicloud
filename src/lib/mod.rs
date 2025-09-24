@@ -5,7 +5,7 @@ use std::env;
 
 pub mod database;
 pub mod migrations;
-pub mod settings_handlers;
+pub mod utils;
 
 pub use database::DatabaseService;
 pub use migrations::MigrationRunner;

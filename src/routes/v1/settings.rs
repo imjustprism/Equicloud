@@ -1,19 +1,19 @@
 use axum::{
-    body::Body,
+    Extension,
+    body::{Body, Bytes},
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
-    Extension,
 };
 use serde_json::json;
-use std::env;
 use tracing::error;
 
 use crate::lib::DatabaseService;
+use crate::lib::utils::{CONFIG, error_response};
 
 pub async fn head_settings(
     Extension(db): Extension<DatabaseService>,
+    Extension(user_id): Extension<String>,
     _headers: HeaderMap,
-    user_id: String,
 ) -> impl IntoResponse {
     match db.get_settings_metadata(&user_id).await {
         Ok(Some(written)) => {
@@ -35,8 +35,8 @@ pub async fn head_settings(
 
 pub async fn get_settings(
     Extension(db): Extension<DatabaseService>,
+    Extension(user_id): Extension<String>,
     headers: HeaderMap,
-    user_id: String,
 ) -> impl IntoResponse {
     match db.get_user_settings(&user_id).await {
         Ok(Some((value, written))) => {
@@ -74,37 +74,32 @@ pub async fn get_settings(
 
 pub async fn put_settings(
     Extension(db): Extension<DatabaseService>,
+    Extension(user_id): Extension<String>,
     headers: HeaderMap,
-    user_id: String,
-    body: Vec<u8>,
+    body: Bytes,
 ) -> impl IntoResponse {
     if headers.get("content-type").and_then(|h| h.to_str().ok()) != Some("application/octet-stream")
     {
         return (
             StatusCode::UNSUPPORTED_MEDIA_TYPE,
-            axum::Json(json!({
-                "error": "Content type must be application/octet-stream"
-            })),
+            axum::Json(error_response(
+                "Content type must be application/octet-stream",
+            )),
         )
             .into_response();
     }
 
-    let size_limit = env::var("MAX_BACKUP_SIZE_BYTES")
-        .unwrap_or_else(|_| "62914560".to_string())
-        .parse::<usize>()
-        .unwrap_or(62914560);
+    let size_limit = CONFIG.max_backup_size_bytes;
 
     if body.len() > size_limit {
         return (
             StatusCode::PAYLOAD_TOO_LARGE,
-            axum::Json(json!({
-                "error": "Settings are too large"
-            })),
+            axum::Json(error_response("Settings are too large")),
         )
             .into_response();
     }
 
-    match db.save_user_settings(&user_id, body).await {
+    match db.save_user_settings(&user_id, body.to_vec()).await {
         Ok(written) => (
             StatusCode::OK,
             axum::Json(json!({
@@ -116,9 +111,7 @@ pub async fn put_settings(
             error!("Database error in put_settings: {}", e);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                axum::Json(json!({
-                    "error": "Failed to save settings"
-                })),
+                axum::Json(error_response("Failed to save settings")),
             )
                 .into_response()
         }
@@ -127,7 +120,7 @@ pub async fn put_settings(
 
 pub async fn delete_settings(
     Extension(db): Extension<DatabaseService>,
-    user_id: String,
+    Extension(user_id): Extension<String>,
 ) -> impl IntoResponse {
     match db.delete_user_settings(&user_id).await {
         Ok(_) => StatusCode::NO_CONTENT,
@@ -137,4 +130,3 @@ pub async fn delete_settings(
         }
     }
 }
-
