@@ -1,7 +1,7 @@
 use axum::{
+    Extension,
     http::StatusCode,
     response::{IntoResponse, Json},
-    Extension,
 };
 use serde_json::json;
 use tracing::error;

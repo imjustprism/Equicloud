@@ -1,3 +1,4 @@
+use crate::lib::utils::hash_user_id;
 use anyhow::Result;
 use scylla::client::session::Session;
 use std::sync::Arc;
@@ -15,10 +16,12 @@ impl DatabaseService {
         })
     }
 
+    pub fn session(&self) -> &Session {
+        &self.session
+    }
 
     pub async fn get_settings_metadata(&self, user_id: &str) -> Result<Option<String>> {
-        let user_hash = crc32fast::hash(user_id.as_bytes());
-        let hash_key = format!("settings:{}", user_hash);
+        let hash_key = hash_user_id(user_id);
 
         let query = "SELECT updated_at FROM users WHERE id = ?";
         let result = self.session.query_unpaged(query, (&hash_key,)).await?;
@@ -33,8 +36,7 @@ impl DatabaseService {
     }
 
     pub async fn get_user_settings(&self, user_id: &str) -> Result<Option<(Vec<u8>, String)>> {
-        let user_hash = crc32fast::hash(user_id.as_bytes());
-        let hash_key = format!("settings:{}", user_hash);
+        let hash_key = hash_user_id(user_id);
 
         let query = "SELECT settings, updated_at FROM users WHERE id = ?";
         let result = self.session.query_unpaged(query, (&hash_key,)).await?;
@@ -49,8 +51,7 @@ impl DatabaseService {
     }
 
     pub async fn save_user_settings(&self, user_id: &str, settings: Vec<u8>) -> Result<i64> {
-        let user_hash = crc32fast::hash(user_id.as_bytes());
-        let hash_key = format!("settings:{}", user_hash);
+        let hash_key = hash_user_id(user_id);
 
         let now = chrono::Utc::now().timestamp_millis();
 
@@ -63,8 +64,7 @@ impl DatabaseService {
     }
 
     pub async fn delete_user_settings(&self, user_id: &str) -> Result<()> {
-        let user_hash = crc32fast::hash(user_id.as_bytes());
-        let hash_key = format!("settings:{}", user_hash);
+        let hash_key = hash_user_id(user_id);
 
         let query = "DELETE FROM users WHERE id = ?";
         self.session.query_unpaged(query, (&hash_key,)).await?;

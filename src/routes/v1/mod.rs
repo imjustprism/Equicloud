@@ -17,10 +17,10 @@ pub fn register() -> Router {
     let auth_routes = Router::new()
         .route(
             "/v1/settings",
-            head(crate::lib::settings_handlers::handle_head_settings)
-                .get(crate::lib::settings_handlers::handle_get_settings)
-                .put(crate::lib::settings_handlers::handle_put_settings)
-                .delete(crate::lib::settings_handlers::handle_delete_settings),
+            head(settings::head_settings)
+                .get(settings::get_settings)
+                .put(settings::put_settings)
+                .delete(settings::delete_settings),
         )
         .route("/v1", delete(delete::delete_all_user_data))
         .route("/v1/", delete(delete::delete_all_user_data))
