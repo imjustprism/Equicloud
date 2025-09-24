@@ -6,6 +6,7 @@ target/
 .github/
 README.md
 LICENSE
+PRIVACY.md
 docker-compose.yml
 compose.yml
 Dockerfile
