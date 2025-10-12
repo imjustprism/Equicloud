@@ -9,14 +9,13 @@ services:
       scylla:
         condition: service_healthy
     restart: unless-stopped
-    networks:
-      - equicloud_net
 
   scylla:
     image: scylladb/scylla:2025.3.1
     restart: unless-stopped
+    user: "0:0"
     volumes:
-      - scylla_data:/var/lib/scylla
+      - ./scylla_data:/var/lib/scylla
     command: [
       "--smp=2",
       "--memory=4G"
@@ -25,16 +24,10 @@ services:
       - SCYLLA_ARGS=--log-to-stdout=1
     healthcheck:
       test: ["CMD-SHELL", "cqlsh -e 'describe cluster'"]
-      interval: 30s
+      interval: 20s
       timeout: 10s
       retries: 5
-    networks:
-      - equicloud_net
 
 
 volumes:
   scylla_data:
-
-networks:
-  equicloud_net:
-    driver: bridge
