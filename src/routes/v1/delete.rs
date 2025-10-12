@@ -6,7 +6,7 @@ use axum::{
 use serde_json::json;
 use tracing::error;
 
-use crate::lib::DatabaseService;
+use equicloud::DatabaseService;
 
 pub async fn get_user_info() -> impl IntoResponse {
     Json(json!({

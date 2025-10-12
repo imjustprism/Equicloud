@@ -4,8 +4,8 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use tracing::{error, info};
 
-use crate::lib::DatabaseService;
-use crate::lib::utils::{CONFIG, error_response, get_user_secret};
+use equicloud::DatabaseService;
+use equicloud::utils::{CONFIG, error_response, get_user_secret};
 
 #[derive(Deserialize)]
 pub struct OAuthCallback {

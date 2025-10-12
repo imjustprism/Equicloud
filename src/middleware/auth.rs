@@ -1,7 +1,7 @@
 use anyhow::Result;
 use axum::{extract::Request, http::StatusCode, middleware::Next, response::Response};
 use base64::prelude::*;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 pub async fn auth_middleware(mut request: Request, next: Next) -> Result<Response, StatusCode> {
     let headers = request.headers();
@@ -48,7 +48,21 @@ async fn verify_token(token: &str) -> Result<String> {
         ));
     }
 
-    let (_secret, discord_user_id) = (parts[0], parts[1]);
+    let (provided_secret, discord_user_id) = (parts[0], parts[1]);
 
-    Ok(discord_user_id.to_string())
+    let expected_secret = equicloud::utils::get_user_secret(discord_user_id);
+    if provided_secret == expected_secret {
+        return Ok(discord_user_id.to_string());
+    }
+
+    let legacy_secret = equicloud::hash_migration::legacy::get_user_secret(discord_user_id);
+    if provided_secret == legacy_secret {
+        warn!(
+            "User {} authenticated with legacy secret format, they should re-authenticate to get new secret",
+            discord_user_id
+        );
+        return Ok(discord_user_id.to_string());
+    }
+
+    Err(anyhow::anyhow!("Invalid secret for user"))
 }

@@ -1,7 +1,9 @@
-use crate::lib::utils::hash_user_id;
+use crate::hash_migration::legacy;
+use crate::utils::hash_user_id;
 use anyhow::Result;
 use scylla::client::session::Session;
 use std::sync::Arc;
+use tracing::{info, warn};
 
 #[derive(Clone)]
 pub struct DatabaseService {
@@ -32,6 +34,20 @@ impl DatabaseService {
             return Ok(Some(updated_at.to_string()));
         }
 
+        let legacy_hash_key = legacy::hash_user_id(user_id);
+        if legacy_hash_key != hash_key {
+            let result = self
+                .session
+                .query_unpaged(query, (&legacy_hash_key,))
+                .await?;
+            let rows_result = result.into_rows_result()?;
+            for row in rows_result.rows::<(i64,)>()? {
+                let (updated_at,) = row?;
+                warn!("Found legacy data for user, will migrate on next write");
+                return Ok(Some(updated_at.to_string()));
+            }
+        }
+
         Ok(None)
     }
 
@@ -47,6 +63,31 @@ impl DatabaseService {
             return Ok(Some((settings, updated_at.to_string())));
         }
 
+        let legacy_hash_key = legacy::hash_user_id(user_id);
+        if legacy_hash_key != hash_key {
+            let result = self
+                .session
+                .query_unpaged(query, (&legacy_hash_key,))
+                .await?;
+            let rows_result = result.into_rows_result()?;
+            for row in rows_result.rows::<(Vec<u8>, i64)>()? {
+                let (settings, updated_at) = row?;
+                info!(
+                    "Found legacy settings for user {}, migrating to new hash format",
+                    user_id
+                );
+
+                if let Err(e) = self
+                    .migrate_user_data(user_id, &legacy_hash_key, &hash_key, &settings, updated_at)
+                    .await
+                {
+                    warn!("Failed to migrate user data: {}", e);
+                }
+
+                return Ok(Some((settings, updated_at.to_string())));
+            }
+        }
+
         Ok(None)
     }
 
@@ -60,6 +101,13 @@ impl DatabaseService {
             .query_unpaged(query, (&hash_key, &settings, now, now))
             .await?;
 
+        let legacy_hash_key = legacy::hash_user_id(user_id);
+        if legacy_hash_key != hash_key {
+            if let Err(e) = self.delete_legacy_data(&legacy_hash_key).await {
+                warn!("Failed to clean up legacy data: {}", e);
+            }
+        }
+
         Ok(now)
     }
 
@@ -69,6 +117,52 @@ impl DatabaseService {
         let query = "DELETE FROM users WHERE id = ?";
         self.session.query_unpaged(query, (&hash_key,)).await?;
 
+        let legacy_hash_key = legacy::hash_user_id(user_id);
+        if legacy_hash_key != hash_key {
+            if let Err(e) = self.delete_legacy_data(&legacy_hash_key).await {
+                warn!("Failed to delete legacy data: {}", e);
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn migrate_user_data(
+        &self,
+        user_id: &str,
+        legacy_key: &str,
+        new_key: &str,
+        settings: &[u8],
+        updated_at: i64,
+    ) -> Result<()> {
+        info!("Migrating user {} from legacy hash to SHA-256", user_id);
+
+        let query = "SELECT created_at FROM users WHERE id = ?";
+        let result = self.session.query_unpaged(query, (legacy_key,)).await?;
+        let rows_result = result.into_rows_result()?;
+
+        let created_at = rows_result
+            .rows::<(i64,)>()?
+            .next()
+            .transpose()?
+            .map(|row| row.0)
+            .unwrap_or(updated_at);
+
+        let insert_query =
+            "INSERT INTO users (id, settings, created_at, updated_at) VALUES (?, ?, ?, ?)";
+        self.session
+            .query_unpaged(insert_query, (new_key, settings, created_at, updated_at))
+            .await?;
+
+        self.delete_legacy_data(legacy_key).await?;
+
+        info!("Successfully migrated user {}", user_id);
+        Ok(())
+    }
+
+    async fn delete_legacy_data(&self, legacy_key: &str) -> Result<()> {
+        let query = "DELETE FROM users WHERE id = ?";
+        self.session.query_unpaged(query, (legacy_key,)).await?;
         Ok(())
     }
 }

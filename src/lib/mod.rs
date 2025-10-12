@@ -4,6 +4,7 @@ use scylla::client::session_builder::SessionBuilder;
 use std::env;
 
 pub mod database;
+pub mod hash_migration;
 pub mod migrations;
 pub mod utils;
 

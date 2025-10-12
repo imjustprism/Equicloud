@@ -7,8 +7,8 @@ use axum::{
 use serde_json::json;
 use tracing::error;
 
-use crate::lib::DatabaseService;
-use crate::lib::utils::{CONFIG, error_response};
+use equicloud::DatabaseService;
+use equicloud::utils::{CONFIG, error_response};
 
 pub async fn head_settings(
     Extension(db): Extension<DatabaseService>,

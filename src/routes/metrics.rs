@@ -9,7 +9,7 @@ use std::env;
 use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::lib::DatabaseService;
+use equicloud::DatabaseService;
 
 static START_TIME: OnceLock<u64> = OnceLock::new();
 
