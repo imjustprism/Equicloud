@@ -9,6 +9,7 @@
 //! 3. Optionally delete legacy entries (with --delete-legacy flag)
 
 use dotenv::dotenv;
+use equicloud::constants::DEFAULT_SCYLLA_URI;
 use equicloud::hash_migration::is_legacy_key;
 use scylla::client::session::Session;
 use std::env;
@@ -76,7 +77,15 @@ async fn main() {
 
     info!("Scanning for legacy entries...");
 
-    for row in rows_result.rows::<(String,)>().unwrap() {
+    let rows = match rows_result.rows::<(String,)>() {
+        Ok(r) => r,
+        Err(e) => {
+            error!("Failed to parse rows: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    for row in rows {
         let (user_id,) = match row {
             Ok(id) => id,
             Err(e) => {
@@ -129,7 +138,7 @@ async fn main() {
 }
 
 async fn create_database_connection() -> anyhow::Result<Session> {
-    let uri = env::var("SCYLLA_URI").unwrap_or_else(|_| "127.0.0.1:9042".to_string());
+    let uri = env::var("SCYLLA_URI").unwrap_or_else(|_| DEFAULT_SCYLLA_URI.to_string());
     let username = env::var("SCYLLA_USERNAME").ok();
     let password = env::var("SCYLLA_PASSWORD").ok();
 

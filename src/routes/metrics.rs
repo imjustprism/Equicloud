@@ -8,8 +8,10 @@ use serde_json::json;
 use std::env;
 use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
+use tracing::error;
 
 use equicloud::DatabaseService;
+use equicloud::constants::{MS_PER_DAY, MS_PER_MONTH, MS_PER_WEEK};
 
 static START_TIME: OnceLock<u64> = OnceLock::new();
 
@@ -44,7 +46,10 @@ async fn get_metrics(Extension(db): Extension<DatabaseService>) -> impl IntoResp
 
     let user_counts = match get_user_counts(&db).await {
         Ok(counts) => counts,
-        Err(_) => UserCounts::default(),
+        Err(e) => {
+            error!("Failed to get user counts for metrics: {}", e);
+            UserCounts::default()
+        }
     };
 
     Json(json!({
@@ -68,9 +73,9 @@ struct UserCounts {
 
 async fn get_user_counts(db: &DatabaseService) -> Result<UserCounts, anyhow::Error> {
     let now = chrono::Utc::now().timestamp_millis();
-    let day_ago = now - (24 * 60 * 60 * 1000);
-    let week_ago = now - (7 * 24 * 60 * 60 * 1000);
-    let month_ago = now - (30 * 24 * 60 * 60 * 1000);
+    let day_ago = now - MS_PER_DAY;
+    let week_ago = now - MS_PER_WEEK;
+    let month_ago = now - MS_PER_MONTH;
 
     let total = query_user_count(db, "SELECT COUNT(*) FROM users", &[]).await?;
     let day = query_user_count_with_filter(db, day_ago, "last day").await?;
@@ -112,7 +117,7 @@ async fn query_user_count_with_filter(
     timestamp: i64,
     period: &str,
 ) -> Result<u64, anyhow::Error> {
-    let query = "SELECT COUNT(*) FROM users WHERE created_at > ? ALLOW FILTERING";
+    let query = "SELECT COUNT(*) FROM users WHERE created_at > ?";
     let count = db
         .session()
         .query_unpaged(query, (timestamp,))

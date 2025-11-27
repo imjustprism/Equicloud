@@ -40,11 +40,10 @@ pub async fn get_settings(
 ) -> impl IntoResponse {
     match db.get_user_settings(&user_id).await {
         Ok(Some((value, written))) => {
-            if let Some(if_none_match) = headers.get("if-none-match") {
-                if if_none_match.to_str().unwrap_or("") == written {
-                    return (StatusCode::NOT_MODIFIED, HeaderMap::new(), Body::empty())
-                        .into_response();
-                }
+            if let Some(if_none_match) = headers.get("if-none-match")
+                && if_none_match.to_str().unwrap_or("") == written
+            {
+                return (StatusCode::NOT_MODIFIED, HeaderMap::new(), Body::empty()).into_response();
             }
 
             let mut response_headers = HeaderMap::new();
@@ -64,8 +63,7 @@ pub async fn get_settings(
             error!("Database error in get_settings: {}", e);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                HeaderMap::new(),
-                Body::empty(),
+                axum::Json(error_response("Failed to retrieve settings")),
             )
                 .into_response()
         }

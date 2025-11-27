@@ -2,6 +2,7 @@ use once_cell::sync::Lazy;
 use serde_json::{Value, json};
 use std::env;
 
+use crate::constants::DEFAULT_MAX_BACKUP_SIZE;
 use crate::hash_migration::sha256;
 
 pub fn hash_user_id(user_id: &str) -> String {
@@ -27,9 +28,9 @@ impl Config {
     pub fn from_env() -> Self {
         Self {
             max_backup_size_bytes: env::var("MAX_BACKUP_SIZE_BYTES")
-                .unwrap_or_else(|_| "62914560".to_string())
-                .parse::<usize>()
-                .unwrap_or(62914560),
+                .ok()
+                .and_then(|s| s.parse::<usize>().ok())
+                .unwrap_or(DEFAULT_MAX_BACKUP_SIZE),
             discord_client_id: env::var("DISCORD_CLIENT_ID").unwrap_or_default(),
             discord_client_secret: env::var("DISCORD_CLIENT_SECRET").unwrap_or_default(),
             server_fqdn: env::var("SERVER_FQDN").unwrap_or_default(),

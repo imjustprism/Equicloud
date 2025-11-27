@@ -22,14 +22,14 @@ async fn health_check() -> Json<Value> {
 }
 
 async fn root_redirect() -> Response {
-    if let Ok(redirect_url) = env::var("API_ROOT_REDIRECT_URL") {
-        if !redirect_url.is_empty() {
-            debug!("Redirecting to: {}", redirect_url);
-            if redirect_url.starts_with("http://") || redirect_url.starts_with("https://") {
-                return Redirect::permanent(&redirect_url).into_response();
-            } else {
-                debug!("Invalid redirect URL format: {}", redirect_url);
-            }
+    if let Ok(redirect_url) = env::var("API_ROOT_REDIRECT_URL")
+        && !redirect_url.is_empty()
+    {
+        debug!("Redirecting to: {}", redirect_url);
+        if redirect_url.starts_with("http://") || redirect_url.starts_with("https://") {
+            return Redirect::permanent(&redirect_url).into_response();
+        } else {
+            debug!("Invalid redirect URL format: {}", redirect_url);
         }
     }
 

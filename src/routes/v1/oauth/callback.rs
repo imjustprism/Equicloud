@@ -1,10 +1,10 @@
-use axum::{Extension, extract::Query, response::Json};
+use axum::{extract::Query, response::Json};
 use reqwest;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use tracing::{error, info};
 
-use equicloud::DatabaseService;
+use equicloud::constants::{DISCORD_TOKEN_URL, DISCORD_USER_URL};
 use equicloud::utils::{CONFIG, error_response, get_user_secret};
 
 #[derive(Deserialize)]
@@ -23,10 +23,7 @@ struct DiscordUserResult {
     id: String,
 }
 
-pub async fn oauth_callback(
-    Extension(_db): Extension<DatabaseService>,
-    Query(params): Query<OAuthCallback>,
-) -> Json<Value> {
+pub async fn oauth_callback(Query(params): Query<OAuthCallback>) -> Json<Value> {
     if let Some(error) = params.error {
         return Json(error_response(&error));
     }
@@ -43,7 +40,7 @@ pub async fn oauth_callback(
     let client = reqwest::Client::new();
 
     let token_response = client
-        .post("https://discord.com/api/oauth2/token")
+        .post(DISCORD_TOKEN_URL)
         .form(&[
             ("client_id", &CONFIG.discord_client_id),
             ("client_secret", &CONFIG.discord_client_secret),
@@ -76,7 +73,7 @@ pub async fn oauth_callback(
     };
 
     let user_response = client
-        .get("https://discord.com/api/users/@me")
+        .get(DISCORD_USER_URL)
         .header(
             "Authorization",
             format!("Bearer {}", token_result.access_token),
@@ -106,12 +103,12 @@ pub async fn oauth_callback(
 
     let user_id = user_result.id;
 
-    if let Some(allowed_users) = &CONFIG.discord_allowed_user_ids {
-        if !allowed_users.is_empty() {
-            let allowed_list: Vec<&str> = allowed_users.split(',').map(|s| s.trim()).collect();
-            if !allowed_list.contains(&user_id.as_str()) {
-                return Json(error_response("User is not whitelisted"));
-            }
+    if let Some(allowed_users) = &CONFIG.discord_allowed_user_ids
+        && !allowed_users.is_empty()
+    {
+        let allowed_list: Vec<&str> = allowed_users.split(',').map(|s| s.trim()).collect();
+        if !allowed_list.contains(&user_id.as_str()) {
+            return Json(error_response("User is not whitelisted"));
         }
     }
 

@@ -13,11 +13,7 @@ pub async fn auth_middleware(mut request: Request, next: Next) -> Result<Respons
             StatusCode::UNAUTHORIZED
         })?;
 
-    let token = if auth_header.starts_with("Bearer ") {
-        &auth_header[7..]
-    } else {
-        auth_header
-    };
+    let token = auth_header.strip_prefix("Bearer ").unwrap_or(auth_header);
 
     match verify_token(token).await {
         Ok(user_id) => {

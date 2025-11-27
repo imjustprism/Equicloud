@@ -4,12 +4,12 @@ use std::fs;
 use std::path::Path;
 use tracing::{debug, info, warn};
 
-pub struct MigrationRunner {
-    session: Session,
+pub struct MigrationRunner<'a> {
+    session: &'a Session,
 }
 
-impl MigrationRunner {
-    pub fn new(session: Session) -> Self {
+impl<'a> MigrationRunner<'a> {
+    pub fn new(session: &'a Session) -> Self {
         Self { session }
     }
 
