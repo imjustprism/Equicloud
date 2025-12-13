@@ -1,8 +1,9 @@
 use axum::http::HeaderValue;
 use dotenv::dotenv;
-use equicloud::constants::{DEFAULT_HOST, DEFAULT_PORT};
+use equicloud::constants::{DB_HEALTH_CHECK_INTERVAL_SECS, DEFAULT_HOST, DEFAULT_PORT};
 use equicloud::{DatabaseService, MigrationRunner, create_database_connection};
 use std::env;
+use std::time::Duration;
 use tokio::net::TcpListener;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::{error, info, warn};
@@ -90,7 +91,7 @@ async fn main() {
     let cors = configure_cors();
 
     let app = routes::register_routes()
-        .layer(axum::extract::Extension(db_service))
+        .layer(axum::extract::Extension(db_service.clone()))
         .layer(cors);
 
     let listener = TcpListener::bind(&bind_address).await.unwrap_or_else(|e| {
@@ -99,6 +100,40 @@ async fn main() {
     });
 
     info!("Server running on http://{}", bind_address);
+
+    let health_check_db = db_service;
+    tokio::spawn(async move {
+        let mut consecutive_failures = 0;
+        const MAX_CONSECUTIVE_FAILURES: u32 = 3;
+
+        loop {
+            tokio::time::sleep(Duration::from_secs(DB_HEALTH_CHECK_INTERVAL_SECS)).await;
+
+            match health_check_db.health_check().await {
+                Ok(_) => {
+                    if consecutive_failures > 0 {
+                        info!("Database connection restored");
+                        consecutive_failures = 0;
+                    }
+                }
+                Err(e) => {
+                    consecutive_failures += 1;
+                    error!(
+                        "Database health check failed ({}/{}): {}",
+                        consecutive_failures, MAX_CONSECUTIVE_FAILURES, e
+                    );
+
+                    if consecutive_failures >= MAX_CONSECUTIVE_FAILURES {
+                        error!(
+                            "Database connection lost after {} consecutive failures, shutting down",
+                            MAX_CONSECUTIVE_FAILURES
+                        );
+                        std::process::exit(1);
+                    }
+                }
+            }
+        }
+    });
 
     if let Err(e) = axum::serve(listener, app).await {
         error!("Server failed to start: {}", e);

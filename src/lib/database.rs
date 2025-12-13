@@ -31,6 +31,13 @@ impl DatabaseService {
         &self.session
     }
 
+    pub async fn health_check(&self) -> Result<()> {
+        self.session
+            .query_unpaged("SELECT now() FROM system.local", &[])
+            .await?;
+        Ok(())
+    }
+
     pub async fn get_settings_metadata(&self, user_id: &str) -> Result<Option<String>> {
         let hash_key = hash_user_id(user_id);
         let query = "SELECT updated_at FROM users WHERE id = ?";

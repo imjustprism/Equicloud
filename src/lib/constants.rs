@@ -10,3 +10,5 @@ pub const DISCORD_USER_URL: &str = "https://discord.com/api/users/@me";
 pub const MS_PER_DAY: i64 = 24 * 60 * 60 * 1000;
 pub const MS_PER_WEEK: i64 = 7 * MS_PER_DAY;
 pub const MS_PER_MONTH: i64 = 30 * MS_PER_DAY;
+
+pub const DB_HEALTH_CHECK_INTERVAL_SECS: u64 = 30;
