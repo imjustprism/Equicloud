@@ -2,7 +2,7 @@ use axum::extract::DefaultBodyLimit;
 use axum::http::HeaderValue;
 use dotenv::dotenv;
 use equicloud::constants::{
-    DB_HEALTH_CHECK_INTERVAL_SECS, DEFAULT_HOST, DEFAULT_PORT, MAX_KEY_SIZE,
+    DB_HEALTH_CHECK_INTERVAL_SECS, DEFAULT_HOST, DEFAULT_MAX_BACKUP_SIZE, DEFAULT_PORT,
 };
 use equicloud::{DatabaseService, MigrationRunner, create_database_connection};
 use governor::middleware::NoOpMiddleware;
@@ -177,7 +177,7 @@ async fn main() {
 
     let cors = configure_cors();
 
-    let max_body_size = MAX_KEY_SIZE + 4096;
+    let max_body_size = DEFAULT_MAX_BACKUP_SIZE + 4096;
 
     let app = routes::register_routes()
         .layer(axum::extract::Extension(db_service.clone()))
