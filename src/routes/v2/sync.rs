@@ -25,7 +25,8 @@ pub struct UploadEntry {
     key: String,
     #[serde(with = "base64_serde")]
     value: Vec<u8>,
-    checksum: String,
+    #[serde(default)]
+    checksum: Option<String>,
 }
 
 mod base64_serde {
@@ -169,14 +170,20 @@ pub async fn delta_sync(
             continue;
         }
 
-        let computed = compute_checksum(&upload.value);
-        if computed != upload.checksum {
-            errors.push(SyncError {
-                key: upload.key,
-                error: "Checksum mismatch".into(),
-            });
-            continue;
-        }
+        let checksum = match &upload.checksum {
+            Some(provided) => {
+                let computed = compute_checksum(&upload.value);
+                if computed != *provided {
+                    errors.push(SyncError {
+                        key: upload.key,
+                        error: "Checksum mismatch".into(),
+                    });
+                    continue;
+                }
+                computed
+            }
+            None => compute_checksum(&upload.value),
+        };
 
         let dominated_by_server = server_map.get(upload.key.as_str()).is_some_and(|s| {
             client_map
@@ -204,7 +211,7 @@ pub async fn delta_sync(
 
         running_size = new_running;
         keys_to_check.push(upload.key.clone());
-        valid_uploads.push((upload.key, upload.value, upload.checksum));
+        valid_uploads.push((upload.key, upload.value, checksum));
     }
 
     let mut updated_keys: HashMap<String, (i64, String, i32)> = HashMap::new();
