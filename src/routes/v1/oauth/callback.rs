@@ -5,7 +5,7 @@ use serde_json::{Value, json};
 use tracing::{error, info};
 
 use equicloud::constants::{DISCORD_TOKEN_URL, DISCORD_USER_URL};
-use equicloud::utils::{CONFIG, error_response, get_user_secret};
+use equicloud::utils::{CONFIG, error_response, get_user_secret, hash_user_id};
 
 #[derive(Deserialize)]
 pub struct OAuthCallback {
@@ -116,8 +116,9 @@ pub async fn oauth_callback(Query(params): Query<OAuthCallback>) -> Json<Value> 
     }
 
     let secret = get_user_secret(&user_id);
+    let user_hash = hash_user_id(&user_id);
 
-    info!("User {} authenticated successfully", user_id);
+    info!("User {} authenticated successfully", &user_hash[..16]);
 
     Json(json!({
         "secret": secret

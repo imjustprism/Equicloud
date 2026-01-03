@@ -1,22 +1,37 @@
+use axum::extract::DefaultBodyLimit;
 use axum::http::HeaderValue;
 use dotenv::dotenv;
-use equicloud::constants::{DB_HEALTH_CHECK_INTERVAL_SECS, DEFAULT_HOST, DEFAULT_PORT};
+use equicloud::constants::{
+    DB_HEALTH_CHECK_INTERVAL_SECS, DEFAULT_HOST, DEFAULT_PORT, MAX_KEY_SIZE,
+};
 use equicloud::{DatabaseService, MigrationRunner, create_database_connection};
+use governor::middleware::NoOpMiddleware;
+use http::Method;
+use http::header::{CONTENT_TYPE, HeaderName};
 use std::env;
+use std::net::SocketAddr;
 use std::time::Duration;
 use tokio::net::TcpListener;
-use tower_http::cors::{Any, CorsLayer};
+use tower_governor::GovernorLayer;
+use tower_governor::governor::GovernorConfigBuilder;
+use tower_governor::key_extractor::PeerIpKeyExtractor;
+use tower_http::cors::CorsLayer;
+use tower_http::limit::RequestBodyLimitLayer;
+use tower_http::set_header::SetResponseHeaderLayer;
 use tracing::{error, info, warn};
 
 mod middleware;
 mod routes;
+
+type SecurityHeaderLayer =
+    SetResponseHeaderLayer<fn(&http::Response<axum::body::Body>) -> Option<HeaderValue>>;
 
 fn configure_cors() -> CorsLayer {
     let origins = env::var("CORS_ALLOWED_ORIGINS").ok();
 
     match origins.as_deref() {
         Some("*") => {
-            warn!("CORS configured for all origins - insecure for production!");
+            warn!("CORS configured for all origins - use specific origins in production!");
             CorsLayer::permissive()
         }
         Some(origins_str) => {
@@ -26,21 +41,88 @@ fn configure_cors() -> CorsLayer {
                 .collect();
 
             if valid_origins.is_empty() {
-                warn!("No valid CORS origins found, defaulting to permissive");
-                CorsLayer::permissive()
+                warn!("No valid CORS origins parsed, CORS will reject cross-origin requests");
+                CorsLayer::new()
             } else {
-                info!("CORS configured for origins: {:?}", valid_origins);
+                info!("CORS configured for {} origins", valid_origins.len());
                 CorsLayer::new()
                     .allow_origin(valid_origins)
-                    .allow_methods(Any)
-                    .allow_headers(Any)
+                    .allow_methods([
+                        Method::GET,
+                        Method::POST,
+                        Method::PUT,
+                        Method::DELETE,
+                        Method::HEAD,
+                        Method::OPTIONS,
+                    ])
+                    .allow_headers([
+                        CONTENT_TYPE,
+                        HeaderName::from_static("authorization"),
+                        HeaderName::from_static("if-none-match"),
+                    ])
+                    .expose_headers([
+                        HeaderName::from_static("etag"),
+                        HeaderName::from_static("x-version"),
+                    ])
             }
         }
         None => {
-            warn!("CORS_ALLOWED_ORIGINS not set, using permissive CORS");
+            warn!("CORS_ALLOWED_ORIGINS not set - defaulting to permissive for development");
             CorsLayer::permissive()
         }
     }
+}
+
+fn configure_rate_limiter() -> GovernorLayer<PeerIpKeyExtractor, NoOpMiddleware, axum::body::Body> {
+    let per_second = env::var("RATE_LIMIT_PER_SECOND")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(50u64);
+
+    let burst_size = env::var("RATE_LIMIT_BURST")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(150u32);
+
+    info!("Rate limiting: {} req/s, burst: {}", per_second, burst_size);
+
+    let config = GovernorConfigBuilder::default()
+        .per_second(per_second)
+        .burst_size(burst_size)
+        .finish()
+        .expect("Failed to build rate limiter config");
+
+    GovernorLayer::new(config)
+}
+
+fn security_headers_layer() -> SecurityHeaderLayer {
+    SetResponseHeaderLayer::overriding(
+        HeaderName::from_static("x-content-type-options"),
+        |_res: &http::Response<axum::body::Body>| Some(HeaderValue::from_static("nosniff")),
+    )
+}
+
+fn frame_options_layer() -> SecurityHeaderLayer {
+    SetResponseHeaderLayer::overriding(
+        HeaderName::from_static("x-frame-options"),
+        |_res: &http::Response<axum::body::Body>| Some(HeaderValue::from_static("DENY")),
+    )
+}
+
+fn cache_control_layer() -> SecurityHeaderLayer {
+    SetResponseHeaderLayer::if_not_present(
+        HeaderName::from_static("cache-control"),
+        |_res: &http::Response<axum::body::Body>| {
+            Some(HeaderValue::from_static("no-store, max-age=0"))
+        },
+    )
+}
+
+fn referrer_policy_layer() -> SecurityHeaderLayer {
+    SetResponseHeaderLayer::overriding(
+        HeaderName::from_static("referrer-policy"),
+        |_res: &http::Response<axum::body::Body>| Some(HeaderValue::from_static("no-referrer")),
+    )
 }
 
 #[tokio::main]
@@ -88,11 +170,32 @@ async fn main() {
     let server_port = env::var("SERVER_PORT").unwrap_or_else(|_| DEFAULT_PORT.to_string());
     let bind_address = format!("{}:{}", server_host, server_port);
 
+    let rate_limit_enabled = env::var("RATE_LIMIT_ENABLED")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(true);
+
     let cors = configure_cors();
+
+    let max_body_size = MAX_KEY_SIZE + 4096;
 
     let app = routes::register_routes()
         .layer(axum::extract::Extension(db_service.clone()))
-        .layer(cors);
+        .layer(cors)
+        .layer(security_headers_layer())
+        .layer(frame_options_layer())
+        .layer(cache_control_layer())
+        .layer(referrer_policy_layer())
+        .layer(DefaultBodyLimit::disable())
+        .layer(RequestBodyLimitLayer::new(max_body_size));
+
+    let app = if rate_limit_enabled {
+        info!("Rate limiting enabled");
+        app.layer(configure_rate_limiter())
+    } else {
+        warn!("Rate limiting disabled");
+        app
+    };
 
     let listener = TcpListener::bind(&bind_address).await.unwrap_or_else(|e| {
         error!("Failed to bind to address {}: {}", bind_address, e);
@@ -135,7 +238,12 @@ async fn main() {
         }
     });
 
-    if let Err(e) = axum::serve(listener, app).await {
+    if let Err(e) = axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await
+    {
         error!("Server failed to start: {}", e);
         std::process::exit(1);
     }
