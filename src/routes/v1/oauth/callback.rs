@@ -39,15 +39,18 @@ pub async fn oauth_callback(Query(params): Query<OAuthCallback>) -> Json<Value> 
 
     let client = reqwest::Client::new();
 
+    let grant_type = "authorization_code";
+    let scope = "identify";
+
     let token_response = client
         .post(DISCORD_TOKEN_URL)
         .form(&[
-            ("client_id", &CONFIG.discord_client_id),
-            ("client_secret", &CONFIG.discord_client_secret),
-            ("grant_type", &"authorization_code".to_string()),
-            ("code", &code),
-            ("redirect_uri", &redirect_uri),
-            ("scope", &"identify".to_string()),
+            ("client_id", CONFIG.discord_client_id.as_str()),
+            ("client_secret", CONFIG.discord_client_secret.as_str()),
+            ("grant_type", grant_type),
+            ("code", code.as_str()),
+            ("redirect_uri", redirect_uri.as_str()),
+            ("scope", scope),
         ])
         .send()
         .await;
