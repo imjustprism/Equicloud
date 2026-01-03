@@ -5,8 +5,8 @@ use std::env;
 
 use crate::constants::{
     CHECKSUM_BYTES, DEFAULT_COMPRESSION_ENABLED, DEFAULT_DATASTORE_ENABLED,
-    DEFAULT_MAX_BACKUP_SIZE, DEFAULT_ZSTD_COMPRESSION_LEVEL, MAX_CHUNK_SIZE,
-    MAX_DATASTORE_KEY_SIZE, MAX_DECOMPRESSION_SIZE, MAX_KEY_NAME_LEN, MAX_KEY_SIZE,
+    DEFAULT_MAX_BACKUP_SIZE, DEFAULT_ZSTD_COMPRESSION_LEVEL, MAX_DATASTORE_KEY_SIZE,
+    MAX_DECOMPRESSION_SIZE, MAX_KEY_NAME_LEN, MAX_KEY_SIZE,
 };
 use crate::hash_migration::sha256;
 
@@ -111,7 +111,6 @@ pub struct Config {
     pub max_backup_size_bytes: usize,
     pub max_key_size_bytes: usize,
     pub max_datastore_key_size_bytes: usize,
-    pub max_chunk_size_bytes: usize,
     pub compression_enabled: bool,
     pub compression_level: i32,
     pub datastore_enabled: bool,
@@ -137,10 +136,6 @@ impl Config {
                 .ok()
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(MAX_DATASTORE_KEY_SIZE),
-            max_chunk_size_bytes: env::var("MAX_CHUNK_SIZE_BYTES")
-                .ok()
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(MAX_CHUNK_SIZE),
             compression_enabled: env::var("COMPRESSION_ENABLED")
                 .ok()
                 .and_then(|s| s.parse().ok())

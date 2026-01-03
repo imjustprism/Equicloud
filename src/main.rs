@@ -1,9 +1,8 @@
 use axum::extract::DefaultBodyLimit;
 use axum::http::HeaderValue;
 use dotenv::dotenv;
-use equicloud::constants::{
-    DB_HEALTH_CHECK_INTERVAL_SECS, DEFAULT_HOST, DEFAULT_MAX_BACKUP_SIZE, DEFAULT_PORT,
-};
+use equicloud::constants::{DB_HEALTH_CHECK_INTERVAL_SECS, DEFAULT_HOST, DEFAULT_PORT};
+use equicloud::utils::CONFIG;
 use equicloud::{DatabaseService, MigrationRunner, create_database_connection};
 use governor::middleware::NoOpMiddleware;
 use http::Method;
@@ -14,7 +13,7 @@ use std::time::Duration;
 use tokio::net::TcpListener;
 use tower_governor::GovernorLayer;
 use tower_governor::governor::GovernorConfigBuilder;
-use tower_governor::key_extractor::PeerIpKeyExtractor;
+use tower_governor::key_extractor::{PeerIpKeyExtractor, SmartIpKeyExtractor};
 use tower_http::cors::CorsLayer;
 use tower_http::limit::RequestBodyLimitLayer;
 use tower_http::set_header::SetResponseHeaderLayer;
@@ -73,7 +72,34 @@ fn configure_cors() -> CorsLayer {
     }
 }
 
-fn configure_rate_limiter() -> GovernorLayer<PeerIpKeyExtractor, NoOpMiddleware, axum::body::Body> {
+fn configure_rate_limiter_peer() -> GovernorLayer<PeerIpKeyExtractor, NoOpMiddleware, axum::body::Body>
+{
+    let (per_second, burst_size) = rate_limit_params();
+
+    let config = GovernorConfigBuilder::default()
+        .per_second(per_second)
+        .burst_size(burst_size)
+        .finish()
+        .expect("Failed to build rate limiter config");
+
+    GovernorLayer::new(config)
+}
+
+fn configure_rate_limiter_proxy(
+) -> GovernorLayer<SmartIpKeyExtractor, NoOpMiddleware, axum::body::Body> {
+    let (per_second, burst_size) = rate_limit_params();
+
+    let config = GovernorConfigBuilder::default()
+        .per_second(per_second)
+        .burst_size(burst_size)
+        .key_extractor(SmartIpKeyExtractor)
+        .finish()
+        .expect("Failed to build rate limiter config");
+
+    GovernorLayer::new(config)
+}
+
+fn rate_limit_params() -> (u64, u32) {
     let per_second = env::var("RATE_LIMIT_PER_SECOND")
         .ok()
         .and_then(|s| s.parse().ok())
@@ -86,13 +112,7 @@ fn configure_rate_limiter() -> GovernorLayer<PeerIpKeyExtractor, NoOpMiddleware,
 
     info!("Rate limiting: {} req/s, burst: {}", per_second, burst_size);
 
-    let config = GovernorConfigBuilder::default()
-        .per_second(per_second)
-        .burst_size(burst_size)
-        .finish()
-        .expect("Failed to build rate limiter config");
-
-    GovernorLayer::new(config)
+    (per_second, burst_size)
 }
 
 fn security_headers_layer() -> SecurityHeaderLayer {
@@ -175,9 +195,14 @@ async fn main() {
         .and_then(|s| s.parse().ok())
         .unwrap_or(true);
 
+    let trust_proxy_headers = env::var("TRUST_PROXY_HEADERS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(false);
+
     let cors = configure_cors();
 
-    let max_body_size = DEFAULT_MAX_BACKUP_SIZE + 4096;
+    let max_body_size = CONFIG.max_backup_size_bytes + 4096;
 
     let app = routes::register_routes()
         .layer(axum::extract::Extension(db_service.clone()))
@@ -189,12 +214,19 @@ async fn main() {
         .layer(DefaultBodyLimit::disable())
         .layer(RequestBodyLimitLayer::new(max_body_size));
 
-    let app = if rate_limit_enabled {
-        info!("Rate limiting enabled");
-        app.layer(configure_rate_limiter())
-    } else {
-        warn!("Rate limiting disabled");
-        app
+    let app = match (rate_limit_enabled, trust_proxy_headers) {
+        (true, true) => {
+            info!("Rate limiting enabled (trusting proxy headers)");
+            app.layer(configure_rate_limiter_proxy())
+        }
+        (true, false) => {
+            info!("Rate limiting enabled (using peer IP)");
+            app.layer(configure_rate_limiter_peer())
+        }
+        (false, _) => {
+            warn!("Rate limiting disabled");
+            app
+        }
     };
 
     let listener = TcpListener::bind(&bind_address).await.unwrap_or_else(|e| {
