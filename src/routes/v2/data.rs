@@ -24,6 +24,14 @@ pub async fn get_data(
             .into_response();
     }
 
+    if !CONFIG.datastore_enabled && key.starts_with("dataStore/") {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({"error": "DataStore sync is disabled"})),
+        )
+            .into_response();
+    }
+
     let entry = match db.get_data_key(&user_id, &key).await {
         Ok(Some(e)) => e,
         Ok(None) => {
@@ -75,6 +83,14 @@ pub async fn put_data(
             .into_response();
     }
 
+    if !CONFIG.datastore_enabled && key.starts_with("dataStore/") {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({"error": "DataStore sync is disabled"})),
+        )
+            .into_response();
+    }
+
     if headers.get("content-type").and_then(|h| h.to_str().ok()) != Some("application/octet-stream")
     {
         return (
@@ -84,10 +100,17 @@ pub async fn put_data(
             .into_response();
     }
 
-    if body.len() > CONFIG.max_key_size_bytes {
+    let max_size = if key.starts_with("dataStore/") {
+        CONFIG.max_datastore_key_size_bytes
+    } else {
+        CONFIG.max_key_size_bytes
+    };
+
+    if body.len() > max_size {
+        let limit_mb = max_size / 1024 / 1024;
         return (
             StatusCode::PAYLOAD_TOO_LARGE,
-            Json(serde_json::json!({"error": "Value exceeds 1MB limit"})),
+            Json(serde_json::json!({"error": format!("Value exceeds {}MB limit", limit_mb)})),
         )
             .into_response();
     }
@@ -135,6 +158,14 @@ pub async fn delete_data(
         return (
             StatusCode::BAD_REQUEST,
             Json(serde_json::json!({"error": e.message()})),
+        )
+            .into_response();
+    }
+
+    if !CONFIG.datastore_enabled && key.starts_with("dataStore/") {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({"error": "DataStore sync is disabled"})),
         )
             .into_response();
     }

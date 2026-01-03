@@ -162,10 +162,25 @@ pub async fn delta_sync(
             continue;
         }
 
-        if upload.value.len() > CONFIG.max_key_size_bytes {
+        if !CONFIG.datastore_enabled && upload.key.starts_with("dataStore/") {
             errors.push(SyncError {
                 key: upload.key,
-                error: "Value exceeds 1MB limit".into(),
+                error: "DataStore sync is disabled".into(),
+            });
+            continue;
+        }
+
+        let key_max_size = if upload.key.starts_with("dataStore/") {
+            CONFIG.max_datastore_key_size_bytes
+        } else {
+            CONFIG.max_key_size_bytes
+        };
+
+        if upload.value.len() > key_max_size {
+            let limit_mb = key_max_size / 1024 / 1024;
+            errors.push(SyncError {
+                key: upload.key,
+                error: format!("Value exceeds {}MB limit", limit_mb),
             });
             continue;
         }

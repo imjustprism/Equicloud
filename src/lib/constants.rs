@@ -14,7 +14,10 @@ pub const MS_PER_MONTH: i64 = 30 * MS_PER_DAY;
 pub const DB_HEALTH_CHECK_INTERVAL_SECS: u64 = 30;
 
 pub const MAX_KEY_SIZE: usize = 1_048_576; // 1 MB
+pub const MAX_DATASTORE_KEY_SIZE: usize = 10_485_760; // 10 MB (compresses to <1MB)
 pub const MAX_KEY_NAME_LEN: usize = 256;
+pub const MAX_CHUNK_SIZE: usize = 512 * 1024; // 512 KB chunks for large data
+pub const DEFAULT_DATASTORE_ENABLED: bool = false;
 
 pub const DEFAULT_ZSTD_COMPRESSION_LEVEL: i32 = 3;
 pub const CHECKSUM_BYTES: usize = 8;

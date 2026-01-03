@@ -2,6 +2,7 @@ use axum::{Extension, Json, http::StatusCode, response::IntoResponse};
 use serde::Serialize;
 use tracing::error;
 
+use equicloud::utils::CONFIG;
 use equicloud::{DataManifestEntry, DatabaseService};
 
 #[derive(Serialize)]
@@ -24,6 +25,15 @@ pub async fn get_manifest(
             )
                 .into_response();
         }
+    };
+
+    let entries: Vec<DataManifestEntry> = if CONFIG.datastore_enabled {
+        entries
+    } else {
+        entries
+            .into_iter()
+            .filter(|e| !e.key.starts_with("dataStore/"))
+            .collect()
     };
 
     let total_size: i64 = entries.iter().map(|e| e.size_bytes as i64).sum();

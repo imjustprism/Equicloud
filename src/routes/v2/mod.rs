@@ -11,7 +11,7 @@ pub fn register() -> Router {
     Router::new()
         .route("/v2/manifest", get(manifest::get_manifest))
         .route(
-            "/v2/data/{key}",
+            "/v2/data/{*key}",
             get(data::get_data)
                 .put(data::put_data)
                 .delete(data::delete_data),

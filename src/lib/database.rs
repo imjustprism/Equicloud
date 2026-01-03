@@ -401,8 +401,15 @@ impl DatabaseService {
     ) -> Result<(i64, i64)> {
         check_key(key)?;
 
-        if value.len() > CONFIG.max_key_size_bytes {
-            return Err(anyhow::anyhow!("Value exceeds 1MB limit"));
+        let max_size = if key.starts_with("dataStore/") {
+            CONFIG.max_datastore_key_size_bytes
+        } else {
+            CONFIG.max_key_size_bytes
+        };
+
+        if value.len() > max_size {
+            let limit_mb = max_size / 1024 / 1024;
+            return Err(anyhow::anyhow!("Value exceeds {}MB limit", limit_mb));
         }
 
         let hash_key = hash_user_id(user_id);
@@ -475,7 +482,12 @@ impl DatabaseService {
         let prepared_entries: Vec<_> = entries
             .into_iter()
             .filter_map(|(key, value, checksum)| {
-                if value.len() > CONFIG.max_key_size_bytes {
+                let max_size = if key.starts_with("dataStore/") {
+                    CONFIG.max_datastore_key_size_bytes
+                } else {
+                    CONFIG.max_key_size_bytes
+                };
+                if value.len() > max_size {
                     return None;
                 }
                 let size_bytes = value.len() as i32;
@@ -636,8 +648,15 @@ impl DatabaseService {
     ) -> Result<Option<(i64, i64)>> {
         check_key(key)?;
 
-        if value.len() > CONFIG.max_key_size_bytes {
-            return Err(anyhow::anyhow!("Value exceeds 1MB limit"));
+        let max_size = if key.starts_with("dataStore/") {
+            CONFIG.max_datastore_key_size_bytes
+        } else {
+            CONFIG.max_key_size_bytes
+        };
+
+        if value.len() > max_size {
+            let limit_mb = max_size / 1024 / 1024;
+            return Err(anyhow::anyhow!("Value exceeds {}MB limit", limit_mb));
         }
 
         let hash_key: Arc<str> = hash_user_id(user_id).into();
