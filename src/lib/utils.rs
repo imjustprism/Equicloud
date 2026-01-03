@@ -5,7 +5,7 @@ use std::env;
 
 use crate::constants::{
     CHECKSUM_BYTES, DEFAULT_COMPRESSION_ENABLED, DEFAULT_MAX_BACKUP_SIZE,
-    DEFAULT_ZSTD_COMPRESSION_LEVEL, MAX_KEY_NAME_LEN, MAX_KEY_SIZE,
+    DEFAULT_ZSTD_COMPRESSION_LEVEL, MAX_DECOMPRESSION_SIZE, MAX_KEY_NAME_LEN, MAX_KEY_SIZE,
 };
 use crate::hash_migration::sha256;
 
@@ -31,8 +31,10 @@ pub fn compress(data: &[u8]) -> Vec<u8> {
     }
     let capacity = zstd::zstd_safe::compress_bound(data.len());
     let mut output = Vec::with_capacity(capacity);
-    zstd::stream::copy_encode(data, &mut output, CONFIG.compression_level)
-        .expect("zstd compression failed");
+
+    if zstd::stream::copy_encode(data, &mut output, CONFIG.compression_level).is_err() {
+        return data.to_vec();
+    }
 
     if output.len() < data.len() {
         output
@@ -45,9 +47,23 @@ pub fn decompress(data: &[u8]) -> Vec<u8> {
     if data.len() < 4 || data[..4] != ZSTD_MAGIC {
         return data.to_vec();
     }
-    let estimated_size = data.len() * 4;
+
+    let mut decoder = match zstd::stream::Decoder::new(data) {
+        Ok(d) => d,
+        Err(_) => return data.to_vec(),
+    };
+
+    let estimated_size = data.len().saturating_mul(4).min(MAX_DECOMPRESSION_SIZE);
     let mut output = Vec::with_capacity(estimated_size);
-    if zstd::stream::copy_decode(data, &mut output).is_ok() {
+
+    use std::io::Read;
+    let limit = MAX_DECOMPRESSION_SIZE as u64 + 1;
+    let mut limited_reader = (&mut decoder).take(limit);
+
+    if limited_reader.read_to_end(&mut output).is_ok() {
+        if output.len() > MAX_DECOMPRESSION_SIZE {
+            return data.to_vec();
+        }
         output
     } else {
         data.to_vec()

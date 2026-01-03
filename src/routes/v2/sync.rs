@@ -215,8 +215,36 @@ pub async fn delta_sync(
             .map(|(k, v, c)| (k.clone(), (c.clone(), v.len() as i32)))
             .collect();
 
-        let existing_versions = match db.get_versions_batch(&user_id, &keys_to_check).await {
-            Ok(v) => v,
+        match db.get_versions_batch(&user_id, &keys_to_check).await {
+            Ok(existing_versions) => {
+                match db
+                    .save_data_keys_batch(&user_id, valid_uploads, &existing_versions)
+                    .await
+                {
+                    Ok(saved) => {
+                        for (key, version, _) in saved {
+                            if let Some((checksum, size)) = upload_info.get(&key) {
+                                updated_keys
+                                    .insert(key.clone(), (version, checksum.clone(), *size));
+                                uploaded.push(UploadResult {
+                                    key,
+                                    version,
+                                    checksum: checksum.clone(),
+                                });
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        error!("Failed to save batch: {}", e);
+                        for key in keys_to_check {
+                            errors.push(SyncError {
+                                key,
+                                error: "Failed to save".into(),
+                            });
+                        }
+                    }
+                }
+            }
             Err(e) => {
                 error!("Failed to get versions batch: {}", e);
                 for (key, _, _) in valid_uploads {
@@ -224,31 +252,6 @@ pub async fn delta_sync(
                         key,
                         error: "Failed to save".into(),
                     });
-                }
-                valid_uploads = Vec::new();
-                std::collections::HashMap::new()
-            }
-        };
-
-        if !valid_uploads.is_empty() {
-            match db
-                .save_data_keys_batch(&user_id, valid_uploads, &existing_versions)
-                .await
-            {
-                Ok(saved) => {
-                    for (key, version, _) in saved {
-                        if let Some((checksum, size)) = upload_info.get(&key) {
-                            updated_keys.insert(key.clone(), (version, checksum.clone(), *size));
-                            uploaded.push(UploadResult {
-                                key,
-                                version,
-                                checksum: checksum.clone(),
-                            });
-                        }
-                    }
-                }
-                Err(e) => {
-                    error!("Failed to save batch: {}", e);
                 }
             }
         }
